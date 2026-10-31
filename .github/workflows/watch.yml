@@ -1,0 +1,137 @@
+name: UT Bot AVAX watcher
+
+on:
+  # Every minute is not honoured by GitHub's scheduler and just gets dropped
+  # (observed: ~1 run per 30-45 min, then nothing at all). A 5-minute tick is
+  # ample for a 30-minute signal and keeps the queue clean.
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  watch-m1:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore M1 state
+        uses: actions/cache@v4
+        with:
+          path: state
+          key: utbot-avax-m1-state
+          restore-keys: |
+            utbot-avax-m1-state-
+
+      - name: Run M1 watcher
+        run: |
+          mkdir -p state
+          python utbot_avaxusdt_1m.py > output_m1.txt 2>&1 || true
+          cat output_m1.txt
+
+      - name: Push M1 to ntfy
+        run: |
+          OUTPUT=$(cat output_m1.txt)
+          if [ -n "$OUTPUT" ]; then
+            curl -s -X POST -H "Title: AVAX UT Bot 1m" -H "Tags: chart_with_upwards_trend" -d "$OUTPUT" "https://ntfy.sh/${{ secrets.NTFY_TOPIC }}"
+          fi
+
+      # Fail loudly if the watcher did not just update its state. Without this a
+      # blocked data endpoint looks identical to "no new signals" forever.
+      - name: Assert M1 watcher is alive
+        if: always()
+        run: |
+          python3 - <<'EOF'
+          import json, datetime as dt, sys
+          try:
+              s = json.load(open("state/utbot_avaxusdt_1m.json"))
+          except Exception as e:
+              print("M1 state missing/unreadable:", e); sys.exit(1)
+          last = s.get("last_checked_utc")
+          if not last:
+              print("M1 state has no last_checked_utc"); sys.exit(1)
+          t = dt.datetime.fromisoformat(last).astimezone(dt.timezone.utc)
+          age = (dt.datetime.now(dt.timezone.utc) - t).total_seconds()
+          print(f"M1 state age: {age:.0f}s")
+          sys.exit(1 if age > 900 else 0)
+          EOF
+
+  watch-m30:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore M30 state
+        uses: actions/cache@v4
+        with:
+          path: state
+          key: utbot-avax-m30-state
+          restore-keys: |
+            utbot-avax-m30-state-
+
+      - name: Run M30 watcher
+        run: |
+          mkdir -p state
+          python utbot_avaxusdt_30m.py > output_m30.txt 2>&1 || true
+          cat output_m30.txt
+
+      - name: Push M30 to ntfy
+        run: |
+          OUTPUT=$(cat output_m30.txt)
+          if [ -n "$OUTPUT" ]; then
+            curl -s -X POST -H "Title: AVAX UT Bot 30m" -H "Tags: chart_with_upwards_trend" -d "$OUTPUT" "https://ntfy.sh/${{ secrets.NTFY_TOPIC }}"
+          fi
+
+      - name: Assert M30 watcher is alive
+        if: always()
+        run: |
+          python3 - <<'EOF'
+          import json, datetime as dt, sys
+          try:
+              s = json.load(open("state/utbot_avaxusdt_30m.json"))
+          except Exception as e:
+              print("M30 state missing/unreadable:", e); sys.exit(1)
+          last = s.get("last_checked_utc")
+          if not last:
+              print("M30 state has no last_checked_utc"); sys.exit(1)
+          t = dt.datetime.fromisoformat(last).astimezone(dt.timezone.utc)
+          age = (dt.datetime.now(dt.timezone.utc) - t).total_seconds()
+          print(f"M30 state age: {age:.0f}s")
+          sys.exit(1 if age > 900 else 0)
+          EOF
+
+  watch-ema100:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore EMA100 state
+        uses: actions/cache@v4
+        with:
+          path: state
+          key: avax-ema100-1m-state
+          restore-keys: |
+            avax-ema100-1m-state-
+
+      - name: Run EMA100 crossover watcher
+        run: |
+          mkdir -p state
+          python avax_ema100_1m.py > output_ema100.txt 2>&1 || true
+          cat output_ema100.txt
+
+      - name: Push EMA100 to ntfy
+        run: |
+          OUTPUT=$(cat output_ema100.txt)
+          if [ -n "$OUTPUT" ]; then
+            curl -s -X POST -H "Title: AVAX 100 EMA crossover 1m" -H "Tags: chart_with_upwards_trend" -d "$OUTPUT" "https://ntfy.sh/${{ secrets.NTFY_TOPIC }}"
+          fi
