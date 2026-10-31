@@ -20,7 +20,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: state
-          key: avax-heiken-30m-state
+          key: avax-heiken-30m-state-${{ github.run_id }}
           restore-keys: |
             avax-heiken-30m-state-
 
