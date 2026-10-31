@@ -1,0 +1,38 @@
+name: AVAX Heiken Ashi watcher (30m)
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  watch-heiken:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore Heiken state
+        uses: actions/cache@v4
+        with:
+          path: state
+          key: avax-heiken-30m-state
+          restore-keys: |
+            avax-heiken-30m-state-
+
+      - name: Run Heiken Ashi color-change watcher
+        run: |
+          mkdir -p state
+          python avax_heiken_30m.py > output_heiken.txt 2>&1 || true
+          cat output_heiken.txt
+
+      - name: Push Heiken to ntfy
+        run: |
+          OUTPUT=$(cat output_heiken.txt)
+          if [ -n "$OUTPUT" ]; then
+            curl -s -X POST -H "Title: AVAX Heiken Ashi 30m flip" -H "Tags: chart_with_upwards_trend" -d "$OUTPUT" "https://ntfy.sh/${{ secrets.NTFY_TOPIC }}"
+          fi
